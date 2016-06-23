@@ -1,0 +1,12 @@
+bind: 0.0.0.0
+port: 8140
+debug: False
+
+#local_bind: 10.40.10.122
+#service_node: 10.40.10.1
+
+# Add the list of inter switch links that
+# need to have the vlan included on it by default
+# Not needed if doing Hierarchical port binding
+#trunk_interfaces: uplink
+

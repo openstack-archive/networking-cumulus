@@ -1,0 +1,17 @@
+Source: cumulus-ml2
+Section: python
+Priority: extra
+Maintainer: dev-support <dev-support@cumulusnetworks.com>
+Build-Depends: debhelper (>= 8.0.0), python-setuptools(>= 0.7), python-dev
+Standards-Version: 3.9.3
+Homepage: http://github.com/CumulusNetworks/altocumulus
+#Vcs-Git: git://git.debian.org/collab-maint/cumulus-ml2.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maint/cumulus-ml2.git;a=summary
+
+Package: cumulus-ml2-driver
+Architecture: all
+Depends: ${python:Depends}, ${misc:Depends}
+Description: Mechanism ML2 Driver for Cumulus ML2 Plugin
+ This is installed on the network node where the Neutron server runs.
+ The configuration file located in /etc/neutron/plugins/ml2/ml2_cumulus.ini
+ has sample configs and short help section.

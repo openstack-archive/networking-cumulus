@@ -1,0 +1,4 @@
+#extend-diff-ignore =
+#"(.*setuptools.*)|(.*.pot$)|(.*.pth$)|(.*/.eggs/.*)|(.*/pbr.*)|(AUTHORS)|(Changelog)"
+extend-diff-ignore = "(.*eggs.*)|(.*pbr.*)|(.*.cfg$)"
+

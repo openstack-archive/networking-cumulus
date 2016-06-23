@@ -1,0 +1,3 @@
+debian/tmp/usr/lib/python2.7/dist-packages/cumulus-ml2/mech_driver/*.py
+debian/tmp/usr/lib/python2.7/dist-packages/cumulus-ml2/utils/*.py
+debian/tmp/usr/lib/python2.7/dist-packages/cumulus*.egg-info/*
