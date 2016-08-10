@@ -11,7 +11,7 @@ X-Python-Version: >= 2.7
 #Vcs-Git: git://git.debian.org/collab-maint/cumulus-ml2.git
 #Vcs-Browser: http://git.debian.org/?p=collab-maint/cumulus-ml2.git;a=summary
 
-Package: cumulus-ml2
+Package: cumulus-ml2-driver
 Architecture: all
 Depends: ${python:Depends}, ${misc:Depends}
 Description: Mechanism ML2 Driver for Cumulus ML2 Plugin

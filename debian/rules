@@ -26,7 +26,7 @@ endif
 override_dh_auto_install:
 	set -e && for pyvers in $(shell pyversions -r); do \
 		$$pyvers setup.py install --install-layout=deb \
-		--root $(CURDIR)/debian/cumulus-ml2; \
+		--root $(CURDIR)/debian/cumulus-ml2-driver; \
 	done
 
 override_dh_clean:
@@ -34,12 +34,9 @@ override_dh_clean:
 	rm -rf build __pycache__
 	rm -rf *.egg-info
 
-override_dh_installinit:
-	dh_installinit --name=cumulus-ml2
-
 override_dh_systemd_enable:
-	dh_systemd_enable --no-enable --name=cumulus-ml2
+	dh_systemd_enable --no-enable
 
 override_dh_systemd_start:
-	dh_systemd_start --no-start --name=cumulus-ml2
+	dh_systemd_start --no-start
 

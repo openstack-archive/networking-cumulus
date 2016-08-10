@@ -32,10 +32,9 @@ weakness of plugin for future development and improvement.
 
 ## Usage
 
-There are two components involved in this project:
+The component involved in this project:
 
 * ML2 mechanism driver (runs on hosts with Neutron server)
-* HTTP API server (runs on switches)
 
 ## Requirements
   Openstack Kilo Release. Does not work with Juno or Older releases
