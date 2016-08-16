@@ -60,34 +60,37 @@ class CumulusMechanismDriver(MechanismDriver):
 
         # remove vxlan from all hosts - a little unpleasant
         for _switch_ip in self.switches:
-            try:
-                actions = [
-                    VXLAN_URL.format(
-                        scheme=self.scheme,
-                        base=_switch_ip,
-                        port=self.protocol_port,
-                        vni=vni
-                    ),
-                    NETWORKS_URL.format(
-                        scheme=self.scheme,
-                        base=_switch_ip,
-                        port=self.protocol_port,
-                        network=network_id
-                    )
-                ]
 
-                for action in actions:
-                    r = requests.delete(action)
+            r = requests.delete(
+                VXLAN_URL.format(
+                    scheme=self.scheme,
+                    base=_switch_ip,
+                    port=self.protocol_port,
+                    network=network_id,
+                    vni=vni
+                )
+            )
 
-                    if r.status_code != requests.codes.ok:
-                        LOG.info(
-                            _LI('Error during %s delete. HTTP Error:%s'),
-                            action, r.status_code
-                        )
+            if r.status_code != requests.codes.ok:
+                LOG.info(
+                    _LI('Error during vxlan delete. HTTP Error:%d'),
+                    r.status_code
+                )
 
-            except Exception, e:
-                # errors might be normal, but should improve this
-                LOG.info(_LI('Error during net delete. Error %s'), e)
+            r = requests.delete(
+                NETWORKS_URL.format(
+                    scheme=self.scheme,
+                    base=_switch_ip,
+                    port=self.protocol_port,
+                    network=network_id
+                )
+            )
+
+            if r.status_code != requests.codes.ok:
+                LOG.info(
+                    _LI('Error during network delete. HTTP Error:%d'),
+                    r.status_code
+                )
 
     def create_port_postcommit(self, context):
         if context.segments_to_bind:
