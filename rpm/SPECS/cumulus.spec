@@ -1,7 +1,7 @@
 %define name cumulus-ml2
-%define version 1.0.0-cl3u1
-%define unmangled_version 1.0.0-cl3u1
-%define unmangled_version 1.0.0-cl3u1
+%define version 1.0.0
+%define unmangled_version 1.0.0
+%define unmangled_version 1.0.0
 %define release 1
 
 Summary: UNKNOWN

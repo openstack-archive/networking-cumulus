@@ -10,7 +10,7 @@ from neutron.i18n import _LE, _LI, _LW
 from neutron.plugins.ml2.common.exceptions import MechanismDriverError
 from neutron.plugins.ml2.driver_api import MechanismDriver
 
-from mech_driver import config
+from cumulus_ml2.mech_driver import config
 
 LOG = logging.getLogger(__name__)
 NETWORKS_URL = '{scheme}://{base}:{port}/ml2/v1/networks/{network}'
