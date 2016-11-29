@@ -1,0 +1,7 @@
+# cumulus-rootwrap command filters for network manipulation
+# This file should be owned by (and only-writable by) the root user
+
+[Filters]
+ifreload: CommandFilter, ifreload, root
+ifup: CommandFilter, ifup, root
+ifdown: CommandFilter, ifdown, root
