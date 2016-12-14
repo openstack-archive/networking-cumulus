@@ -1,0 +1,20 @@
+Metadata-Version: 1.1
+Name: networking-cumulus
+Version: 1.0.0.dev9
+Summary: Cumulus ML2 driver
+Home-page: UNKNOWN
+Author: Cumulus Networks
+Author-email: cumulus-ml2@cumulusnetworks.com
+License: UNKNOWN
+Description: 
+        
+        
+Platform: UNKNOWN
+Classifier: Environment :: OpenStack
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7

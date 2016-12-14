@@ -1,0 +1,3 @@
+debian/networking-cumulus/usr/lib/python2.7/dist-packages/networking_cumulus/mech_driver/*.py
+debian/networking-cumulus/usr/lib/python2.7/dist-packages/networking_cumulus/utils/*.py
+debian/networking-cumulus/usr/lib/python2.7/dist-packages/networking_cumulus*.egg-info/*

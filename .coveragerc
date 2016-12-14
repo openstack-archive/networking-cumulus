@@ -1,0 +1,6 @@
+[run]
+branch = True
+source = cumulus-ml2
+
+[report]
+ignore_errors = True

@@ -1,5 +1,5 @@
-cumulus-ml2 (1.0.0-cl3eau1) RELEASED; urgency=low
+networking-cumulus (1.0.0-cl3eau1) UNRELEASED; urgency=medium
 
-  * Initial release
+  * Initial release. (Closes: #XXXXXX)
 
- -- dev-support <dev-support@cumulusnetworks.com>  Wed, 22 June 2016 20:10:36 +0000
+ -- dev-support <dev-support@cumulusnetworks.com>  Fri, 09 Dec 2016 14:28:58 -0800

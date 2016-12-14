@@ -26,7 +26,7 @@ endif
 override_dh_auto_install:
 	set -e && for pyvers in $(shell pyversions -r); do \
 		$$pyvers setup.py install --install-layout=deb \
-		--root $(CURDIR)/debian/cumulus-ml2-driver; \
+		--root $(CURDIR)/debian/networking-cumulus; \
 	done
 
 override_dh_clean:
