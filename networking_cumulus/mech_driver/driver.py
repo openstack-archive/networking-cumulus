@@ -28,7 +28,7 @@ from neutron.plugins.ml2.common.exceptions import MechanismDriverError
 from neutron.plugins.ml2 import driver_api as api
 
 from networking_cumulus._i18n import _, _LI
-from networking_cumulus.mech_driver import config
+from networking_cumulus.mech_driver import config  # noqa
 from networking_cumulus.mech_driver import db
 
 LOG = logging.getLogger(__name__)
@@ -51,13 +51,6 @@ class SwitchState(Enum):
 INVALID_HASH_ID = _('invalid')
 INVALID_VNI = -1
 
-"""list of switches is required to be configured. Add this config to the
-ml2_conf.ini config switch names or IPs must be separated using comma.
-
-[ml2_cumulus]
-switches="192.168.10.10,192.168.20.20"
-"""
-
 
 class CumulusMechanismDriver(api.MechanismDriver):
     """Mechanism driver for Cumulus Linux
@@ -76,7 +69,7 @@ class CumulusMechanismDriver(api.MechanismDriver):
         self.password = cfg.CONF.ml2_cumulus.password
         self.switch_info = {}
         self.sync_timer = None
-        self.sync_thread_lock = None
+        self.sync_thread_lock = threading.Lock()
         self.sync = None
 
     def initialize(self):
@@ -85,21 +78,25 @@ class CumulusMechanismDriver(api.MechanismDriver):
             self.switch_info[switch_id, 'spf_enable'] = self.spf_enable
             self.switch_info[switch_id, 'new_bridge'] = self.new_bridge
 
-        self.sync_thread_lock = threading.Lock()
         if self.sync_timeout > 0:
             self.sync = CumulusSwitchSync(self)
             self.sync_timer = None
-            self._sync_thread()
+            self._start_sync_thread()
 
-    def _sync_thread(self):
+    def _start_sync_thread(self):
         with self.sync_thread_lock:
             self.sync.check_and_replay()
 
         self.sync_timer = threading.Timer(self.sync_timeout,
-                                          self._sync_thread)
+                                          self._start_sync_thread)
         self.sync_timer.start()
 
-    def _get_bridge_name(self, network_id, new_bridge):
+    def stop_sync_thread(self):
+        if self.sync_timer:
+            self.sync_timer.cancel()
+            self.sync_time = None
+
+    def get_bridge_name(self, network_id, new_bridge):
         if new_bridge:
             return NEW_BRIDGE_NAME
         else:
@@ -131,8 +128,8 @@ class CumulusMechanismDriver(api.MechanismDriver):
             db.db_create_network(tenant_id,
                                  network_id,
                                  vlan_id,
-                                 self._get_bridge_name(network_id,
-                                                       self.new_bridge))
+                                 self.get_bridge_name(network_id,
+                                                      self.new_bridge))
 
     def create_network_postcommit(self, context):
         network = context.current
@@ -171,10 +168,6 @@ class CumulusMechanismDriver(api.MechanismDriver):
                            {'switch_id': _switch_id,
                             'error': error})
                     LOG.info(msg)
-#                        _LI('Error connecting to switch %s. HTTP Error:%r'),
-#                        _switch_id,
-#                        error
-#                    )
 
     def delete_network_postcommit(self, context):
         network_id = context.current['id']
@@ -211,10 +204,6 @@ class CumulusMechanismDriver(api.MechanismDriver):
                        {'switch_id': _switch_id,
                         'error': error})
                 LOG.info(msg)
-#                    _LI('Error connecting to switch %s. HTTP Error:%r'),
-#                    _switch_id,
-#                    error
-#                )
 
         with self.sync_thread_lock:
             db.db_delete_network(tenant_id, network_id)
@@ -374,12 +363,6 @@ class CumulusMechanismDriver(api.MechanismDriver):
                                 'switch_id': _switch_id})
 
                         LOG.info(msg)
-#                            _LI('error (%(code)) update port for %(host) on '
-#                            'switch: %(switch_id)'),
-#                            resp.status_code,
-#                            host,
-#                            _switch_id
-#                        )
                         return resp.status_code
 #                    raise MechanismDriverError()
 
@@ -389,10 +372,6 @@ class CumulusMechanismDriver(api.MechanismDriver):
                            {'switch_id': _switch_id,
                             'error': error})
                     LOG.info(msg)
-#                        _LI('Error connecting to switch %s. HTTP Error:%r'),
-#                        _switch_id,
-#                        error
-#                    )
 
     def _remove_from_switch(self, port, network):
         host = port[portbindings.HOST_ID]
@@ -442,11 +421,6 @@ class CumulusMechanismDriver(api.MechanismDriver):
                                 'host': host,
                                 'switch_id': _switch_id})
                         LOG.info(msg)
-#                            _LI('error (%d) del port for %s on switch: %s'),
-#                            resp.status_code,
-#                            host,
-#                            _switch_id
-#                        )
 
                 except requests.exceptions.RequestException as error:
                     msg = (_("Error connecting to switch (%(switch_id)s)."
@@ -454,10 +428,6 @@ class CumulusMechanismDriver(api.MechanismDriver):
                            {'switch_id': _switch_id,
                             'error': error})
                     LOG.info(msg)
-#                        _LI('Error connecting to switch %s. HTTP Error:%r'),
-#                        _switch_id,
-#                        error
-#                    )
 
             with self.sync_thread_lock:
                 db.db_delete_port(network.network_id, port_id, _switch_id,
@@ -485,10 +455,6 @@ class CumulusMechanismDriver(api.MechanismDriver):
                        {'code': resp.status_code,
                         'switch_id': switch_id})
                 LOG.info(msg)
-#                    _LI('Error with request to switch %s. Error:%d'),
-#                    switch_id,
-#                    resp.status_code
-#                )
                 return resp.status_code
 
         except requests.exceptions.RequestException as error:
@@ -497,10 +463,6 @@ class CumulusMechanismDriver(api.MechanismDriver):
                    {'switch_id': switch_id,
                     'error': error})
             LOG.info(msg)
-#                _LI('Error connecting to switch %s. HTTP Error:%r'),
-#                switch_id,
-#                error
-#            )
 
         actions = [
             HOSTS_URL.format(
@@ -534,10 +496,6 @@ class CumulusMechanismDriver(api.MechanismDriver):
                            {'code': resp.status_code,
                             'switch_id': switch_id})
                     LOG.info(msg)
-#                        _LI('Error with request to switch %s. Error:%d'),
-#                        switch_id,
-#                        resp.status_code
-#                    )
                     return resp.status_code
 
             except requests.exceptions.RequestException as error:
@@ -546,10 +504,6 @@ class CumulusMechanismDriver(api.MechanismDriver):
                        {'switch_id': switch_id,
                         'error': error})
                 LOG.info(msg)
-#                    _LI('Error connecting to switch %s. HTTP Error:%r'),
-#                    switch_id,
-#                    error
-#                )
 
         return requests.codes.ok
 

@@ -21,6 +21,8 @@ debian/networking-cumulus.install
 debian/rules
 debian/source/format
 debian/source/options
+devstack/plugin.sh
+devstack/settings
 doc/source/conf.py
 doc/source/contributing.rst
 doc/source/index.rst
@@ -57,6 +59,7 @@ networking_cumulus/tests/__init__.py
 networking_cumulus/tests/base.py
 networking_cumulus/tests/test_networking_cumulus.py
 networking_cumulus/tests/unit/__init__.py
+networking_cumulus/tests/unit/mech_driver/.test_cumulus_mech.py.swp
 networking_cumulus/tests/unit/mech_driver/__init__.py
 networking_cumulus/tests/unit/mech_driver/test_cumulus_mech.py
 networking_cumulus/utils/__init__.py

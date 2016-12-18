@@ -1,0 +1,6 @@
+[neutron.db.alembic_migrations]
+networking-cumulus = networking_cumulus.db.migration:alembic_migrations
+
+[neutron.ml2.mechanism_drivers]
+cumulus = networking_cumulus.mech_driver.driver:CumulusMechanismDriver
+

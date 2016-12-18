@@ -16,14 +16,14 @@
 import sqlalchemy as sa
 
 from neutron.api.v2 import attributes as attr
-from neutron.db import model_base
-from neutron.db import models_v2
+from neutron_lib.db import model_base
 
 BRIDGE_STR_LEN = 15
 CUMULUS_UUID_FIELD_SIZE = 36
 
 
-class CumulusNetworks(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant):
+class CumulusNetworks(model_base.BASEV2, model_base.HasId,
+                      model_base.HasProject):
     """Represents a binding of network id to cumulus bridge."""
 
     __tablename__ = "cumulus_networks"
@@ -48,7 +48,7 @@ class CumulusNetworks(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant):
                 u'bridgeName': self.bridge_name}
 
 
-class CumulusPorts(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant):
+class CumulusPorts(model_base.BASEV2, model_base.HasId, model_base.HasProject):
 
     __tablename__ = "cumulus_ports"
 
