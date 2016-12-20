@@ -1,5 +1,0 @@
-networking-cumulus (1.0.0-cl3eau1) UNRELEASED; urgency=medium
-
-  * Initial release. (Closes: #XXXXXX)
-
- -- dev-support <dev-support@cumulusnetworks.com>  Fri, 09 Dec 2016 14:28:58 -0800
