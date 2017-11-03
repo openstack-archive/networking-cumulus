@@ -19,10 +19,10 @@ from networking_cumulus._i18n import _
 
 CUMULUS_DRIVER_OPTS = [
     cfg.StrOpt('scheme',
-               default='http',
+               default='https',
                help=_('Scheme for base URL for the Cumulus ML2 API')),
     cfg.IntOpt('protocol_port',
-               default='8000',
+               default='8080',
                help=_('Protocol port for base URL for the Cumulus ML2 API')),
     cfg.StrOpt('username',
                default='cumulus',

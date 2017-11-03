@@ -1,4 +1,4 @@
-# Copyright 2016 Cumulus Networks
+# Copyright 2016,2017 Cumulus Networks
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -27,6 +27,9 @@ from neutron.extensions import portbindings
 from neutron.plugins.ml2.common.exceptions import MechanismDriverError
 from neutron.plugins.ml2 import driver_api as api
 
+from neutron_lib.api.definitions import provider_net as pnet
+from neutron_lib import constants as const
+
 from networking_cumulus._i18n import _, _LI
 from networking_cumulus.mech_driver import config  # noqa
 from networking_cumulus.mech_driver import db
@@ -50,6 +53,7 @@ class SwitchState(Enum):
 
 INVALID_HASH_ID = _('invalid')
 INVALID_VNI = -1
+INVALID_VLAN_ID = -1
 
 
 class CumulusMechanismDriver(api.MechanismDriver):
@@ -103,107 +107,80 @@ class CumulusMechanismDriver(api.MechanismDriver):
             bridge_name = OLD_BRIDGE_NAME_PREFIX + network_id[:12]
             return bridge_name
 
+    def _get_segment_ids(self, top_segment, bottom_segment):
+        if top_segment is None:
+            return INVALID_VLAN_ID, INVALID_VNI, False
+        elif top_segment[api.NETWORK_TYPE] == const.TYPE_VXLAN:
+            return bottom_segment[api.SEGMENTATION_ID],\
+                top_segment[api.SEGMENTATION_ID], True
+        else:
+            return top_segment[api.SEGMENTATION_ID], INVALID_VNI, False
+
     def bind_port(self, context):
+
+        port = context.current
         if context.binding_levels:
             return  # we've already got a top binding
+        for segment in context.segments_to_bind:
+            physnet = segment.get(api.PHYSICAL_NETWORK)
+            # If physnet was not found, we cannot bind this port
+            if not physnet:
+                LOG.debug("bind_port for port %(port)s: no physical_network "
+                          "found", {'port': port.get('id')})
+                continue
 
-        # assign a dynamic vlan
-        next_segment = context.allocate_dynamic_segment(
-            {'id': context.network.current, 'network_type': 'vlan'}
-        )
+            if segment[api.NETWORK_TYPE] == const.TYPE_VXLAN:
 
-        context.continue_binding(
-            context.segments_to_bind[0]['id'],
-            [next_segment]
-        )
+                try:
+                    next_segment = context.allocate_dynamic_segment(
+                        {'id': context.network.current['id'],
+                         'network_type': 'vlan',
+                         'physical_network': physnet})
+                except Exception as exc:
+                    LOG.error(_LI("cumulus bind_port for port %(port)s: Failed"
+                                  " to allocate dynamic segment for physnet "
+                                  "%(physnet)s. %(exc)s"),
+                              {'port': port.get('id'), 'physnet': physnet,
+                               'exc': exc})
+                    return
+
+                context.continue_binding(
+                    segment['id'],
+                    [next_segment]
+                )
 
     def create_network_precommit(self, context):
         network = context.current
         network_id = network['id']
         tenant_id = network['tenant_id']
-        segments = context.network_segments
-        vlan_id = segments[0]['segmentation_id']
+
+        if (network[pnet.NETWORK_TYPE] != const.TYPE_VLAN) and\
+           (network[pnet.NETWORK_TYPE] != const.TYPE_VXLAN):
+            return
+
+        if network[pnet.SEGMENTATION_ID]:
+            seg_id = network[pnet.SEGMENTATION_ID]
+        else:
+            return
 
         with self.sync_thread_lock:
             db.db_create_network(tenant_id,
                                  network_id,
-                                 vlan_id,
+                                 seg_id,
                                  self.get_bridge_name(network_id,
                                                       self.new_bridge))
 
     def create_network_postcommit(self, context):
-        network = context.current
-        network_id = network['id']
-        tenant_id = network['tenant_id']
-        segments = context.network_segments
-        vlan_id = segments[0]['segmentation_id']
 
-        with self.sync_thread_lock:
-            bridge_name = db.db_get_bridge_name(tenant_id,
-                                                network_id)
-        if bridge_name:
-            for _switch_id in self.switches:
-                try:
-                    resp = requests.put(
-                        NETWORKS_URL.format(
-                            scheme=self.scheme,
-                            base=_switch_id,
-                            port=self.protocol_port,
-                            bridge=bridge_name,
-                            vlanid=vlan_id
-                        ),
-                        data=json.dumps(
-                            {'spf':
-                             self.switch_info[_switch_id, 'spf_enable'],
-                             'newbridge':
-                             self.switch_info[_switch_id, 'new_bridge']})
-                    )
+        # Returning from here, since the create_port_postcommit or
+        # update_port_postcommit takes care of provision network on the
+        # hardware.
 
-                    if resp.status_code != requests.codes.ok:
-                        raise MechanismDriverError()
-
-                except requests.exceptions.RequestException as error:
-                    msg = (_("Error connecting to switch (%(switch_id)s)."
-                             " HTTP Error %(error)s") %
-                           {'switch_id': _switch_id,
-                            'error': error})
-                    LOG.info(msg)
+        return
 
     def delete_network_postcommit(self, context):
         network_id = context.current['id']
         tenant_id = context.current['tenant_id']
-        segments = context.network_segments
-        vlan_id = segments[0]['segmentation_id']
-
-        with self.sync_thread_lock:
-            bridge_name = db.db_get_bridge_name(tenant_id,
-                                                network_id)
-
-        # remove vxlan from all hosts - a little unpleasant
-        for _switch_id in self.switches:
-            try:
-                resp = requests.delete(
-                    NETWORKS_URL.format(
-                        scheme=self.scheme,
-                        base=_switch_id,
-                        port=self.protocol_port,
-                        bridge=bridge_name,
-                        vlanid=vlan_id
-                    )
-                )
-
-                if resp.status_code != requests.codes.ok:
-                    LOG.info(
-                        _LI('Error during network delete. HTTP Error:%d'),
-                        resp.status_code
-                    )
-
-            except requests.exceptions.RequestException as error:
-                msg = (_("Error connecting to switch (%(switch_id)s)."
-                         " HTTP Error %(error)s") %
-                       {'switch_id': _switch_id,
-                        'error': error})
-                LOG.info(msg)
 
         with self.sync_thread_lock:
             db.db_delete_network(tenant_id, network_id)
@@ -219,13 +196,9 @@ class CumulusMechanismDriver(api.MechanismDriver):
         tenant_id = port['tenant_id']
         host = port[portbindings.HOST_ID]
 
-        if hasattr(context, 'top_bound_segment'):
-            if context.top_bound_segment:
-                vni = context.top_bound_segment['segmentation_id']
-            else:
-                vni = INVALID_VNI
-        else:
-            vni = INVALID_VNI
+        vlan_id, vni, is_vxlan = (self._get_segment_ids(
+                                  context.top_bound_segment,
+                                  context.bottom_bound_segment))
 
         with self.sync_thread_lock:
             bridge_name = db.db_get_bridge_name(tenant_id, network_id)
@@ -234,7 +207,7 @@ class CumulusMechanismDriver(api.MechanismDriver):
 
             for _switch_id in self.switches:
                 db.db_create_port(tenant_id, network_id, port_id, host,
-                                  device_id, bridge_name, _switch_id, vni)
+                                  device_id, bridge_name, _switch_id, vlan_id)
 
     def create_port_postcommit(self, context):
         if not hasattr(context, 'current'):
@@ -262,26 +235,33 @@ class CumulusMechanismDriver(api.MechanismDriver):
         tenant_id = port['tenant_id']
         device_id = port['device_id']
         host = port[portbindings.HOST_ID]
+        orig_port = context.original
+        orig_host = orig_port[portbindings.HOST_ID]
+        orig_vlan_id = None
 
         if not host:
             return
 
-        if hasattr(context, 'top_bound_segment'):
-            if context.top_bound_segment:
-                vni = context.top_bound_segment['segmentation_id']
-            else:
-                vni = INVALID_VNI
-        else:
-            vni = INVALID_VNI
+        vlan_id, vni, is_vxlan = (self._get_segment_ids(
+                                  context.top_bound_segment,
+                                  context.bottom_bound_segment))
+        if vlan_id == INVALID_VLAN_ID:
+            return
 
         with self.sync_thread_lock:
             network = db.db_get_network(tenant_id, network_id)
             if not network:
                 return
+            for _switch_id in self.switches:
+                db_port = db.db_get_port(network_id, port_id, _switch_id, host)
+                if db_port:
+                    orig_vlan_id = db_port.vni
+                    break
 
-        if context.host != context.original_host:
-            self._remove_from_switch(context.original, network)
-        self._add_to_switch(context, network)
+        if (orig_host != host) or (orig_vlan_id != vlan_id):
+            if orig_vlan_id != INVALID_VLAN_ID:
+                self._remove_from_switch(context.original, network, True)
+            self._add_to_switch(context, network)
 
         with self.sync_thread_lock:
             for _switch_id in self.switches:
@@ -289,11 +269,11 @@ class CumulusMechanismDriver(api.MechanismDriver):
                 if not db_port:
                     db.db_create_port(tenant_id, network_id, port_id,
                                       host, device_id,
-                                      network.bridge_name, _switch_id, vni)
+                                      network.bridge_name, _switch_id, vlan_id)
                 else:
                     db.db_update_port(tenant_id, network_id, port_id,
                                       host, device_id,
-                                      network.bridge_name, _switch_id, vni)
+                                      network.bridge_name, _switch_id, vlan_id)
 
     def delete_port_postcommit(self, context):
         if not hasattr(context, 'current'):
@@ -308,7 +288,7 @@ class CumulusMechanismDriver(api.MechanismDriver):
             if not network:
                 return
 
-        self._remove_from_switch(port, network)
+        self._remove_from_switch(port, network, True)
 
     def _add_to_switch(self, context, network):
 
@@ -316,17 +296,50 @@ class CumulusMechanismDriver(api.MechanismDriver):
         device_id = port['device_id']
         device_owner = port['device_owner']
         host = port[portbindings.HOST_ID]
-        if not hasattr(context, 'top_bound_segment'):
+        if not hasattr(context, 'top_bound_segment') or \
+           (context.top_bound_segment is None):
             return
-        if not context.top_bound_segment:
-            return
-        vni = context.top_bound_segment['segmentation_id']
-        vlan_id = context.bottom_bound_segment['segmentation_id']
 
         if not (host and device_id and device_owner):
             return
 
+        vlan_id, vni, is_vxlan = (self._get_segment_ids(
+                                  context.top_bound_segment,
+                                  context.bottom_bound_segment))
+
+        if vlan_id == INVALID_VLAN_ID:
+            return
+
         for _switch_id in self.switches:
+            try:
+                resp = requests.put(
+                    NETWORKS_URL.format(
+                        scheme=self.scheme,
+                        base=_switch_id,
+                        port=self.protocol_port,
+                        bridge=network.bridge_name,
+                        vlanid=vlan_id
+                    ),
+                    data=json.dumps(
+                        {'spf':
+                         self.switch_info[_switch_id, 'spf_enable'],
+                         'newbridge':
+                         self.switch_info[_switch_id, 'new_bridge']}),
+                    auth=(self.username, self.password),
+                    verify=False
+                )
+
+                if resp.status_code != requests.codes.ok:
+                    raise MechanismDriverError()
+
+            except requests.exceptions.RequestException as error:
+                msg = (_("Error connecting to switch (%(switch_id)s)."
+                         " HTTP Error %(error)s") %
+                       {'switch_id': _switch_id,
+                        'error': error})
+                LOG.info(msg)
+                continue
+
             actions = [
                 HOSTS_URL.format(
                     scheme=self.scheme,
@@ -338,7 +351,7 @@ class CumulusMechanismDriver(api.MechanismDriver):
                 ),
             ]
 
-            if context.top_bound_segment != context.bottom_bound_segment:
+            if is_vxlan:
 
                 actions.append(
                     VXLAN_URL.format(
@@ -353,7 +366,9 @@ class CumulusMechanismDriver(api.MechanismDriver):
 
             for action in actions:
                 try:
-                    resp = requests.put(action)
+                    resp = requests.put(action,
+                                        auth=(self.username, self.password),
+                                        verify=False)
 
                     if resp.status_code != requests.codes.ok:
                         msg = (_("Error (%(code)s) update port for %(host)s on"
@@ -373,9 +388,13 @@ class CumulusMechanismDriver(api.MechanismDriver):
                             'error': error})
                     LOG.info(msg)
 
-    def _remove_from_switch(self, port, network):
+    def _remove_from_switch(self, port, network, remove_net):
         host = port[portbindings.HOST_ID]
         port_id = port['id']
+
+        with self.sync_thread_lock:
+            is_vxlan = (db.db_get_seg_type(network.network_id)
+                        == const.TYPE_VXLAN)
 
         for _switch_id in self.switches:
             with self.sync_thread_lock:
@@ -385,7 +404,7 @@ class CumulusMechanismDriver(api.MechanismDriver):
                                          host)
                 if not db_port:
                     continue
-                vni = db_port.vni
+                vlan_id = db_port.vni
 
             actions = [
                 HOSTS_URL.format(
@@ -398,21 +417,23 @@ class CumulusMechanismDriver(api.MechanismDriver):
                 ),
             ]
 
-            if (vni != INVALID_VNI) and (network.segmentation_id != vni):
+            if (is_vxlan):
                 actions.append(
                     VXLAN_URL.format(
                         scheme=self.scheme,
                         base=_switch_id,
                         port=self.protocol_port,
                         bridge=network.bridge_name,
-                        vlanid=network.segmentation_id,
-                        vni=vni
+                        vlanid=vlan_id,
+                        vni=network.segmentation_id
                     )
                 )
 
             for action in actions:
                 try:
-                    resp = requests.delete(action)
+                    resp = requests.delete(action,
+                                           auth=(self.username, self.password),
+                                           verify=False)
 
                     if resp.status_code != requests.codes.ok:
                         msg = (_("Error (%(code)s) delete port for %(host)s on"
@@ -432,9 +453,36 @@ class CumulusMechanismDriver(api.MechanismDriver):
             with self.sync_thread_lock:
                 db.db_delete_port(network.network_id, port_id, _switch_id,
                                   host)
+            if remove_net:
+                try:
+                    resp = requests.delete(
+                        NETWORKS_URL.format(
+                            scheme=self.scheme,
+                            base=_switch_id,
+                            port=self.protocol_port,
+                            bridge=network.bridge_name,
+                            vlanid=vlan_id
+                        ),
+                        auth=(self.username, self.password),
+                        verify=False
+                    )
 
-    def replay_to_switch(self, switch_id, bridge_name, port, vlan):
+                    if resp.status_code != requests.codes.ok:
+                        LOG.info(
+                            _LI('Error during network delete. HTTP Error:%d'),
+                            resp.status_code
+                        )
 
+                except requests.exceptions.RequestException as error:
+                    msg = (_("Error connecting to switch (%(switch_id)s)."
+                             " HTTP Error %(error)s") %
+                           {'switch_id': _switch_id,
+                            'error': error})
+                    LOG.info(msg)
+
+    def replay_to_switch(self, switch_id, bridge_name, port, seg_id):
+
+        is_vxlan = (db.db_get_seg_type(port.network_id) == const.TYPE_VXLAN)
         try:
             resp = requests.put(
                 NETWORKS_URL.format(
@@ -442,12 +490,14 @@ class CumulusMechanismDriver(api.MechanismDriver):
                     base=switch_id,
                     port=self.protocol_port,
                     bridge=bridge_name,
-                    vlanid=vlan
+                    vlanid=port.vni
                 ),
                 data=json.dumps({'spf':
                                  self.switch_info[switch_id, 'spf_enable'],
                                  'newbridge':
-                                 self.switch_info[switch_id, 'new_bridge']})
+                                 self.switch_info[switch_id, 'new_bridge']}),
+                auth=(self.username, self.password),
+                verify=False
             )
 
             if resp.status_code != requests.codes.ok:
@@ -470,26 +520,28 @@ class CumulusMechanismDriver(api.MechanismDriver):
                 base=switch_id,
                 port=self.protocol_port,
                 bridge=bridge_name,
-                vlanid=vlan,
+                vlanid=port.vni,
                 host=port.host_id
             ),
         ]
 
-        if (port.vni != INVALID_VNI) and (port.vni != vlan):
+        if is_vxlan and (seg_id != INVALID_VNI):
             actions.append(
                 VXLAN_URL.format(
                     scheme=self.scheme,
                     base=switch_id,
                     port=self.protocol_port,
                     bridge=bridge_name,
-                    vlanid=vlan,
-                    vni=port.vni
+                    vlanid=port.vni,
+                    vni=seg_id
                 )
             )
 
         for action in actions:
             try:
-                resp = requests.put(action)
+                resp = requests.put(action,
+                                    auth=(self.username, self.password),
+                                    verify=False)
 
                 if resp.status_code != requests.codes.ok:
                     msg = (_("Error %(code)d replay to switch %(switch_id)s") %
@@ -541,16 +593,34 @@ class CumulusSwitchSync(object):
                         scheme=self._mech_driver.scheme,
                         base=switch_id,
                         port=self._mech_driver.protocol_port
-                    )
+                    ),
+                    auth=(self._mech_driver.username,
+                          self._mech_driver.password),
+                    verify=False
                 )
 
-                data = resp.json()
-
-                if data != self._mech_driver.switch_info[switch_id, 'hash_id']:
+                if resp.status_code != requests.codes.ok:
+                    msg = (_("Switch (%(switch_id)s) is unresponsive."
+                             " HTTP Error %(error)d") %
+                           {'switch_id': switch_id,
+                            'error': resp.status_code})
+                    LOG.info(msg)
                     self._mech_driver.switch_info[switch_id, 'state'] = \
-                        SwitchState.active
-                    self._mech_driver.switch_info[switch_id, 'replay'] = True
-                    self._mech_driver.switch_info[switch_id, 'hash_id'] = data
+                        SwitchState.inactive
+                    self._mech_driver.switch_info[switch_id, 'replay'] = False
+                    self._mech_driver.switch_info[switch_id, 'hash_id'] = \
+                        INVALID_HASH_ID
+                else:
+                    data = resp.json()
+
+                    if data != self._mech_driver.switch_info[switch_id,
+                                                             'hash_id']:
+                        self._mech_driver.switch_info[switch_id, 'state'] = \
+                            SwitchState.active
+                        self._mech_driver.switch_info[switch_id, 'replay'] = \
+                            True
+                        self._mech_driver.switch_info[switch_id, 'hash_id'] = \
+                            data
 
             except requests.exceptions.RequestException:
                 self._mech_driver.switch_info[switch_id, 'state'] = \

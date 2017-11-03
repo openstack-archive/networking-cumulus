@@ -61,24 +61,6 @@ class CumulusMechanismDriverTestCase(testlib_api.SqlTestCase):
 
         cumulus_driver.db.assert_has_calls(expected_calls)
 
-    def test_create_network_postcommit(self):
-        network_context = self._get_network_context(TENANT_ID,
-                                                    NETWORK_ID,
-                                                    NETWORK_NAME,
-                                                    VLAN_ID,
-                                                    False)
-        cumulus_driver.db.db_get_bridge_name.return_value = \
-            self.driver.get_bridge_name(NETWORK_ID,
-                                        self.driver.new_bridge)
-
-        self.driver.create_network_postcommit(network_context)
-
-        expected_calls = [
-            mock.call.db_get_bridge_name(TENANT_ID, NETWORK_ID),
-        ]
-
-        cumulus_driver.db.assert_has_calls(expected_calls)
-
     def test_delete_network_postcommit(self):
         cumulus_driver.db.db_get_bridge_name.return_value = \
             self.driver.get_bridge_name(NETWORK_ID,
@@ -91,7 +73,6 @@ class CumulusMechanismDriverTestCase(testlib_api.SqlTestCase):
 
         self.driver.delete_network_postcommit(network_context)
         expected_calls = [
-            mock.call.db_get_bridge_name(TENANT_ID, NETWORK_ID),
             mock.call.db_delete_network(TENANT_ID, NETWORK_ID)
         ]
 
@@ -102,7 +83,9 @@ class CumulusMechanismDriverTestCase(testlib_api.SqlTestCase):
         network = {'id': net_id,
                    'tenant_id': tenant_id,
                    'name': net_name,
-                   'shared': shared}
+                   'shared': shared,
+                   'provider:network_type': 'vlan',
+                   'provider:segmentation_id': segmentation_id}
         network_segments = [{'segmentation_id': segmentation_id,
                              'physical_network': u'default',
                              'id': 'segment-id-for-%s' % segmentation_id,

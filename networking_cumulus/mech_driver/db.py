@@ -14,6 +14,7 @@
 #    under the License.
 
 import neutron.db.api as db_api
+import neutron.db.models.segment as seg_models
 
 from networking_cumulus.mech_driver import models as db_models
 
@@ -63,6 +64,17 @@ def db_get_network(tenant_id, network_id):
                               tenant_id=tenant_id).first())
         if network:
             return network
+        else:
+            return None
+
+
+def db_get_seg_type(network_id):
+    session = db_api.get_session()
+    with session.begin():
+        segment = (session.query(seg_models.NetworkSegment)
+                   .filter_by(network_id=network_id).first())
+        if segment:
+            return segment.network_type
         else:
             return None
 

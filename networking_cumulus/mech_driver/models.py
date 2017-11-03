@@ -15,15 +15,14 @@
 
 import sqlalchemy as sa
 
-from neutron.api.v2 import attributes as attr
+from neutron_lib.db import constants
 from neutron_lib.db import model_base
 
 BRIDGE_STR_LEN = 15
 CUMULUS_UUID_FIELD_SIZE = 36
 
 
-class CumulusNetworks(model_base.BASEV2, model_base.HasId,
-                      model_base.HasProject):
+class CumulusNetworks(model_base.BASEV2, model_base.HasId):
     """Represents a binding of network id to cumulus bridge."""
 
     __tablename__ = "cumulus_networks"
@@ -31,6 +30,7 @@ class CumulusNetworks(model_base.BASEV2, model_base.HasId,
     network_id = sa.Column(sa.String(CUMULUS_UUID_FIELD_SIZE))
     segmentation_id = sa.Column(sa.Integer)
     bridge_name = sa.Column(sa.String(BRIDGE_STR_LEN))
+    tenant_id = sa.Column(sa.String(constants.NAME_FIELD_SIZE))
 
     def __init__(self, network_id=None, tenant_id=None, segmentation_id=None,
                  bridge_name=None, **kwargs):
@@ -48,17 +48,18 @@ class CumulusNetworks(model_base.BASEV2, model_base.HasId,
                 u'bridgeName': self.bridge_name}
 
 
-class CumulusPorts(model_base.BASEV2, model_base.HasId, model_base.HasProject):
+class CumulusPorts(model_base.BASEV2, model_base.HasId):
 
     __tablename__ = "cumulus_ports"
 
     network_id = sa.Column(sa.String(CUMULUS_UUID_FIELD_SIZE))
     port_id = sa.Column(sa.String(CUMULUS_UUID_FIELD_SIZE))
-    device_id = sa.Column(sa.String(attr.NAME_MAX_LEN))
+    device_id = sa.Column(sa.String(constants.NAME_FIELD_SIZE))
     bridge_name = sa.Column(sa.String(BRIDGE_STR_LEN))
-    server_id = sa.Column(sa.String(attr.NAME_MAX_LEN))
-    host_id = sa.Column(sa.String(attr.NAME_MAX_LEN))
+    server_id = sa.Column(sa.String(constants.NAME_FIELD_SIZE))
+    host_id = sa.Column(sa.String(constants.NAME_FIELD_SIZE))
     vni = sa.Column(sa.Integer)
+    tenant_id = sa.Column(sa.String(constants.NAME_FIELD_SIZE))
 
     def __init__(self, port_id=None, tenant_id=None, network_id=None,
                  device_id=None, server_id=None, bridge_name=None,
